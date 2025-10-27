@@ -232,6 +232,8 @@ Response:
 
 ### Create User
 
+**Note:** These examples assume the Security Center is running and exposing the endpoints.
+
 ```bash
 curl -X POST http://localhost:8080/api/v1/users \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -240,9 +242,8 @@ curl -X POST http://localhost:8080/api/v1/users \
     "username": "john.doe",
     "password": "SecurePassword123!",
     "email": "john.doe@example.com",
-    "firstName": "John",
-    "lastName": "Doe",
-    "enabled": true
+    "givenName": "John",
+    "familyName": "Doe"
   }'
 ```
 
@@ -324,135 +325,57 @@ This internal IDP implementation has some limitations compared to full-featured 
 
 For advanced features, consider using `lib-idp-keycloak-impl` or `lib-idp-aws-cognito-impl`.
 
-## API Reference
+## Adapter Implementation
 
-### Authentication Endpoints
+This library implements the `IdpAdapter` interface from `lib-idp-adapter`. It **does not expose REST endpoints directly**. Instead, it provides the backend implementation that the **Firefly Security Center** uses to handle authentication requests.
 
-#### Login
-```http
-POST /api/v1/auth/login
-Content-Type: application/json
+### Implemented Methods
 
-{
-  "username": "admin",
-  "password": "admin123"
-}
-```
+The `InternalDbIdpAdapter` class implements these methods:
 
-**Response:**
-```json
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "tokenType": "Bearer",
-  "expiresIn": 900
-}
-```
+| Method | Description | Returns |
+|--------|-------------|--------|
+| `login(LoginRequest)` | Authenticate user with username/password | `Mono<ResponseEntity<TokenResponse>>` |
+| `refresh(RefreshRequest)` | Refresh access token using refresh token | `Mono<ResponseEntity<TokenResponse>>` |
+| `logout(LogoutRequest)` | Revoke user tokens and logout | `Mono<Void>` |
+| `introspect(String)` | Validate and introspect an access token | `Mono<ResponseEntity<IntrospectionResponse>>` |
+| `getUserInfo(String)` | Get user information from access token | `Mono<ResponseEntity<UserInfoResponse>>` |
+| `createUser(CreateUserRequest)` | Create a new user account | `Mono<ResponseEntity<CreateUserResponse>>` |
+| `updateUser(UpdateUserRequest)` | Update user information | `Mono<ResponseEntity<UpdateUserResponse>>` |
+| `deleteUser(DeleteUserRequest)` | Delete a user account | `Mono<Void>` |
+| `assignRoles(AssignRolesRequest)` | Assign roles to a user | `Mono<Void>` |
+| `removeRoles(RemoveRolesRequest)` | Remove roles from a user | `Mono<Void>` |
+| `getUserSessions(GetUserSessionsRequest)` | List user's active sessions | `Mono<ResponseEntity<UserSessionsResponse>>` |
+| `createRoles(CreateRolesRequest)` | Create new roles | `Mono<ResponseEntity<CreateRolesResponse>>` |
+| `listRoles()` | List all available roles | `Mono<ResponseEntity<RoleListResponse>>` |
 
-#### Refresh Token
-```http
-POST /api/v1/auth/refresh
-Content-Type: application/json
+### REST Endpoints (Exposed by Security Center)
 
-{
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
+When integrated with the Firefly Security Center, the following REST endpoints become available:
 
-#### Logout
-```http
-POST /api/v1/auth/logout
-Content-Type: application/json
+**Authentication:**
+- `POST /api/v1/auth/login` - User login
+- `POST /api/v1/auth/refresh` - Refresh access token
+- `POST /api/v1/auth/logout` - User logout
+- `POST /api/v1/auth/introspect` - Token introspection
+- `GET /api/v1/auth/userinfo` - Get user info
 
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
+**User Management:**
+- `POST /api/v1/users` - Create user
+- `GET /api/v1/users/{id}` - Get user
+- `PUT /api/v1/users/{id}` - Update user
+- `DELETE /api/v1/users/{id}` - Delete user
 
-#### Token Introspection
-```http
-POST /api/v1/auth/introspect
-Content-Type: application/json
+**Role Management:**
+- `POST /api/v1/roles` - Create roles
+- `GET /api/v1/roles` - List roles
+- `POST /api/v1/users/{id}/roles` - Assign roles
+- `DELETE /api/v1/users/{id}/roles` - Remove roles
+- `GET /api/v1/users/{id}/sessions` - Get user sessions
 
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
+**Note:** The Security Center handles HTTP routing, request validation, and response serialization. This adapter focuses solely on business logic and data persistence.
 
-### User Management Endpoints
-
-#### Create User
-```http
-POST /api/v1/users
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-{
-  "username": "john.doe",
-  "password": "SecurePassword123!",
-  "email": "john.doe@example.com",
-  "givenName": "John",
-  "familyName": "Doe"
-}
-```
-
-#### Get User Info
-```http
-GET /api/v1/users/me
-Authorization: Bearer {accessToken}
-```
-
-#### Update User
-```http
-PUT /api/v1/users/{userId}
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-{
-  "email": "new.email@example.com",
-  "givenName": "John",
-  "familyName": "Smith"
-}
-```
-
-#### Delete User
-```http
-DELETE /api/v1/users/{userId}
-Authorization: Bearer {accessToken}
-```
-
-### Role Management Endpoints
-
-#### Assign Roles
-```http
-POST /api/v1/users/{userId}/roles
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-{
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
-  "roleNames": ["USER", "MANAGER"]
-}
-```
-
-#### Remove Roles
-```http
-DELETE /api/v1/users/{userId}/roles
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-{
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
-  "roleNames": ["MANAGER"]
-}
-```
-
-#### List User Sessions
-```http
-GET /api/v1/users/{userId}/sessions
-Authorization: Bearer {accessToken}
-```
+For detailed API documentation, see the [Security Center API Documentation](https://github.com/firefly-oss/common-platform-security-center).
 
 ## Integration with Firefly Security Center
 
